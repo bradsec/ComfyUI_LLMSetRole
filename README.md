@@ -12,18 +12,13 @@ Multi-stage prompt pipelines reuse the same long system prompts. Pasting that pr
 
 ## Nodes included
 
-- **Set Role** - dropdown of roles from `roles/*.md`, outputs the selected role text, its name, and the list position used.
+- **Set Role** - dropdown of roles from `roles/*.md`, outputs the selected role text and its name.
 
 ## Inputs
 
 | Input | Type | Default | Description |
 |---|---|---|---|
-| `mode` | combo | `fixed` | How the role is chosen: `fixed`, `increment`, or `random`. See Selection modes below. |
-| `role` | combo | first role | Role used in `fixed` mode. The list is built from `roles/*.md` at startup. Add a `.md` file and restart ComfyUI to add a role. |
-| `index` | INT | `0` | Position used in `increment` mode. Set its `control_after_generate` to **increment** to advance one role per generation. Wraps within `start..end`. |
-| `seed` | INT | `0` | Seed used in `random` mode. Set `control_after_generate` to **randomize** for a new pick each generation; the same seed reproduces the same role. |
-| `start` | INT | `0` | Lower bound position (0-based) into the alphabetically sorted role list. |
-| `end` | INT | `-1` | Upper bound position; `-1` means the last role. Out-of-range values are clamped. |
+| `role` | combo | first role | The role to output. The list is built from `roles/*.md` at startup. Add a `.md` file and restart ComfyUI to add a role. Use the widget's **control after generate** to step through roles across a batch (see below). |
 
 ## Outputs
 
@@ -31,24 +26,23 @@ Multi-stage prompt pipelines reuse the same long system prompts. Pasting that pr
 |---|---|---|
 | `system_prompt` | STRING | The full text of the selected role file, ready to wire into an LLM node's `system_prompt` input. |
 | `role_name` | STRING | The selected role's display name, e.g. for logging or filename suffixes. |
-| `resolved_index` | INT | The list position actually used. Useful for logging or labelling batched runs. |
 
-## Selection modes
+## Stepping through roles
 
-Roles are sorted alphabetically by display name; `start`/`end` index into that
-list (0-based, `end = -1` means the last). The range is inclusive.
+The `role` dropdown carries ComfyUI's **control after generate** control, the
+same one on a sampler's `seed` widget. It steps the dropdown after each
+generation, so a batch walks your roles natively, with role names shown (no
+index numbers):
 
-- **fixed**: output the `role` dropdown. `index`/`seed`/`start`/`end` ignored.
-- **increment**: output the role at `start + (index mod span)`, wrapping back to
-  `start` after `end`. Set the `index` widget's `control_after_generate` to
-  **increment** so each generation advances to the next role.
-- **random**: output a role picked from `start..end` using `seed`. The same seed
-  always yields the same role; set `control_after_generate` to **randomize** for a
-  fresh pick per run.
+- **fixed**: stay on the selected role.
+- **increment wrap**: advance to the next role each generation and wrap back to
+  the first after the last (Role 0 -> 1 -> ... -> 0). Pick this to cycle through
+  your roles.
+- **decrement**: step backwards.
+- **randomize**: pick a random role each generation (may repeat).
 
-Note: `control_after_generate` is the same per-widget control ComfyUI puts on the
-`seed` widget of samplers. Increment/random still work without it by changing
-`index`/`seed` yourself or by using ComfyUI's batch count.
+Tip: plain **increment** (without "wrap") stops at the last role instead of
+cycling; use **increment wrap** to loop.
 
 ## Adding roles
 
@@ -81,12 +75,12 @@ cd ComfyUI_LLMSetRole
 python -m unittest test_set_role -v
 ```
 
-Expect 25 passing tests (title parsing, filename prettify, label-collision disambiguation, path-traversal rejection, missing-file error, edit hot-reload, bad-encoding tolerance, range bounds/clamp/swap, increment wrap, random determinism, mode selection, shipped-role discovery).
+Expect 15 passing tests (title parsing, filename prettify, label-collision disambiguation, path-traversal rejection, missing-file error, edit hot-reload, bad-encoding tolerance, shipped-role discovery).
 
 ### In ComfyUI
 
 1. Restart ComfyUI so the node loads. Confirm it appears once under **Add Node > LLM** as **Set Role**, with no import error in `user/comfyui.log`.
-2. Add the node, pick a role and mode, and wire `system_prompt` into your LLM node.
+2. Add the node, pick a role (and optionally set its control after generate), and wire `system_prompt` into your LLM node.
 3. Run the workflow. The LLM node receives the selected role text.
 
 ## Installation
