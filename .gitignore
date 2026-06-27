@@ -1,0 +1,24 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Environments
+.venv/
+venv/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+
+# AI tooling and planning artifacts (do not ship to the registry/repo)
+docs/superpowers/
+.claude/
+CLAUDE.md
+*.plan.md
+
+# Private role prose - never commit (user roles stay local)
+roles/*.md
+!roles/.gitkeep
