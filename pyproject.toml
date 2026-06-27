@@ -1,7 +1,7 @@
 [project]
 name = "comfyui_llmsetrole"
-description = "Pick an LLM role (system prompt) from a dropdown and output it as a STRING for an LLM node's system_prompt. Step through roles across a batch with the role widget's control_after_generate (increment wrap / randomize). Roles are plain Markdown files in roles/; add a .md file and restart to add a role. Node name: Set Role. Located under Add Node > LLM."
-version = "1.1.0"
+description = "Pick an LLM role (system prompt) from a dropdown and output it as a STRING for an LLM node's system_prompt. Modes: fixed, increment, or random over a start..end slice, with index/seed control_after_generate to step roles across a batch. Roles are plain Markdown files in roles/; add a .md file and restart to add a role. Node name: Set Role. Located under Add Node > LLM."
+version = "1.2.0"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = []

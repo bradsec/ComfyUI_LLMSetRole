@@ -17,8 +17,11 @@ restart ComfyUI, since the dropdown options are built once at import.
 """
 
 import os
+import random
 import re
 from functools import lru_cache
+
+MODES = ("fixed", "increment", "random")
 
 ROLES_DIR = os.path.join(os.path.dirname(__file__), "roles")
 
@@ -152,3 +155,85 @@ def role_fingerprint(label):
         return f"{fn}:{mtime}"
     except (ValueError, FileNotFoundError, OSError):
         return str(label)
+
+
+# -- Position-based selection (fixed / increment / random) ---------------------
+
+def _clamp(v, lo, hi):
+    return lo if v < lo else hi if v > hi else v
+
+
+def _bounds(start, end, n):
+    """Return (lo, hi, span) inclusive position bounds within a list of size n.
+
+    end < 0 means "last". Out-of-range values are clamped; reversed bounds are
+    swapped. Assumes n >= 1 (callers handle the empty case first).
+    """
+    lo = _clamp(start, 0, n - 1)
+    hi = _clamp(end if end >= 0 else n - 1, 0, n - 1)
+    if lo > hi:
+        lo, hi = hi, lo
+    return lo, hi, hi - lo + 1
+
+
+def label_index(label):
+    """Position of a dropdown label in the sorted role list, or 0 if absent."""
+    for i, (lbl, _) in enumerate(list_roles()):
+        if lbl == label:
+            return i
+    return 0
+
+
+def pick_index(mode, index, seed, start, end, n):
+    """Resolve a role position for increment/random modes.
+
+    increment: lo + (index mod span), wrapping at the end back to the start.
+    random:    lo + Random(seed).randrange(span), deterministic per seed.
+    Raises ValueError if there are no roles.
+    """
+    if n < 1:
+        raise ValueError(
+            f"No role files found in {ROLES_DIR}. Add a .md file and restart ComfyUI."
+        )
+    lo, _, span = _bounds(start, end, n)
+    if mode == "random":
+        return lo + random.Random(seed).randrange(span)
+    # increment (and any unknown mode falls back to deterministic stepping)
+    return lo + (index % span)
+
+
+def role_at(pos):
+    """(label, filename) at a position. Raises ValueError if no roles."""
+    roles = list_roles()
+    if not roles:
+        raise ValueError(
+            f"No role files found in {ROLES_DIR}. Add a .md file and restart ComfyUI."
+        )
+    return roles[pos]
+
+
+def select(mode, role, index, seed, start, end):
+    """Resolve (system_prompt, role_name, resolved_index) for any mode.
+
+    fixed: use the dropdown `role`. increment/random: compute the position from
+    index/seed within [start, end].
+    """
+    if mode == "fixed":
+        pos = label_index(role)
+        body, title = apply_role(role)
+        return body, title, pos
+    pos = pick_index(mode, index, seed, start, end, len(list_roles()))
+    _, fn = role_at(pos)
+    title, body = load_role_text(fn)
+    return body, title, pos
+
+
+def select_fingerprint(mode, role, index, seed, start, end):
+    """Cache identity covering inputs and the resolved file's mtime."""
+    try:
+        _, _, pos = select(mode, role, index, seed, start, end)
+        _, fn = role_at(pos)
+        mtime = os.path.getmtime(os.path.join(ROLES_DIR, fn))
+        return f"{mode}:{pos}:{fn}:{mtime}"
+    except (ValueError, FileNotFoundError, OSError):
+        return f"{mode}:{role}:{index}:{seed}:{start}:{end}"
