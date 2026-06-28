@@ -2,8 +2,8 @@
 
 A role picker: a dropdown of system-prompt roles loaded from roles/*.md, output
 as a STRING to wire into an LLM node's system_prompt input. A mode control
-selects the role by fixed dropdown, by an incrementing index, or randomly by
-seed, bounded to a start..end slice of the list.
+selects the role by fixed dropdown, by an incrementing value, or randomly seeded
+by that same value, bounded to a start..end slice of the list.
 
 Dual-API: the shared core (role_core.select) is wrapped by a V1 class
 (NODE_CLASS_MAPPINGS, authoritative on the 0.25.0 if/elif loader) and an
@@ -20,12 +20,12 @@ DESCRIPTION = "Pick an LLM role system prompt from roles/*.md (fixed, increment,
 
 _ROLE_TIP = ("Role used in 'fixed' mode. The list is built from roles/*.md at "
              "startup; add a .md file and restart ComfyUI to add a role.")
-_MODE_TIP = ("fixed: use the role dropdown. increment: walk the list by 'index', "
-             "wrapping within start..end. random: pick within start..end from 'seed'.")
-_INDEX_TIP = ("Position used in 'increment' mode. Set control_after_generate to "
-              "increment to advance one role per generation. Wraps within start..end.")
-_SEED_TIP = ("Seed used in 'random' mode. Set control_after_generate to randomize for "
-             "a new pick per generation; the same seed reproduces the same role.")
+_MODE_TIP = ("fixed: use the role dropdown. increment: walk the list by 'value', "
+             "wrapping within start..end. random: pick within start..end from 'value'.")
+_VALUE_TIP = ("The stepping input for increment/random modes (ignored in fixed). "
+              "increment: set control_after_generate to increment to advance one role "
+              "per generation, wrapping within start..end. random: set it to randomize "
+              "for a new pick per generation; the same value reproduces the same role.")
 _START_TIP = "Lower bound position (0-based) into the alphabetically sorted role list."
 _END_TIP = "Upper bound position; -1 means the last role. Out-of-range values are clamped."
 
@@ -51,21 +51,19 @@ class LLMSetRoleNode:
             "required": {
                 "mode": (list(core.MODES), {"default": "fixed", "tooltip": _MODE_TIP}),
                 "role": (_ROLE_OPTIONS, {"default": _DEFAULT_ROLE, "tooltip": _ROLE_TIP}),
-                "index": ("INT", {"default": 0, "min": 0, "max": _MAX_INT,
-                                  "control_after_generate": True, "tooltip": _INDEX_TIP}),
-                "seed": ("INT", {"default": 0, "min": 0, "max": _MAX_INT,
-                                 "control_after_generate": True, "tooltip": _SEED_TIP}),
+                "value": ("INT", {"default": 0, "min": 0, "max": _MAX_INT,
+                                  "control_after_generate": True, "tooltip": _VALUE_TIP}),
                 "start": ("INT", {"default": 0, "min": 0, "max": _MAX_INT, "tooltip": _START_TIP}),
                 "end": ("INT", {"default": -1, "min": -1, "max": _MAX_INT, "tooltip": _END_TIP}),
             }
         }
 
-    def set_role(self, mode, role, index, seed, start, end):
-        return core.select(mode, role, index, seed, start, end)
+    def set_role(self, mode, role, value, start, end):
+        return core.select(mode, role, value, start, end)
 
     @classmethod
-    def IS_CHANGED(cls, mode, role, index, seed, start, end):
-        return core.select_fingerprint(mode, role, index, seed, start, end)
+    def IS_CHANGED(cls, mode, role, value, start, end):
+        return core.select_fingerprint(mode, role, value, start, end)
 
 
 NODE_CLASS_MAPPINGS = {NODE_ID: LLMSetRoleNode}
@@ -99,10 +97,8 @@ try:
                                    default="fixed", tooltip=_MODE_TIP),
                     io.Combo.Input("role", options=_ROLE_OPTIONS,
                                    default=_DEFAULT_ROLE, tooltip=_ROLE_TIP),
-                    _int_input("index", control=True, default=0, min=0, max=_MAX_INT,
-                               tooltip=_INDEX_TIP),
-                    _int_input("seed", control=True, default=0, min=0, max=_MAX_INT,
-                               tooltip=_SEED_TIP),
+                    _int_input("value", control=True, default=0, min=0, max=_MAX_INT,
+                               tooltip=_VALUE_TIP),
                     _int_input("start", default=0, min=0, max=_MAX_INT, tooltip=_START_TIP),
                     _int_input("end", default=-1, min=-1, max=_MAX_INT, tooltip=_END_TIP),
                 ],
@@ -114,12 +110,12 @@ try:
             )
 
         @classmethod
-        def fingerprint_inputs(cls, mode, role, index, seed, start, end):
-            return core.select_fingerprint(mode, role, index, seed, start, end)
+        def fingerprint_inputs(cls, mode, role, value, start, end):
+            return core.select_fingerprint(mode, role, value, start, end)
 
         @classmethod
-        def execute(cls, mode, role, index, seed, start, end) -> io.NodeOutput:
-            body, title, pos = core.select(mode, role, index, seed, start, end)
+        def execute(cls, mode, role, value, start, end) -> io.NodeOutput:
+            body, title, pos = core.select(mode, role, value, start, end)
             return io.NodeOutput(body, title, pos)
 
     class LLMSetRoleExtension(ComfyExtension):

@@ -143,27 +143,27 @@ class TestBounds(unittest.TestCase):
 
 class TestPickIndex(unittest.TestCase):
     def test_increment_wraps(self):
-        got = [core.pick_index("increment", i, 0, 0, -1, 3) for i in range(5)]
+        got = [core.pick_index("increment", i, 0, -1, 3) for i in range(5)]
         self.assertEqual(got, [0, 1, 2, 0, 1])
 
     def test_increment_within_subrange(self):
-        got = [core.pick_index("increment", i, 0, 1, 2, 3) for i in range(4)]
+        got = [core.pick_index("increment", i, 1, 2, 3) for i in range(4)]
         self.assertEqual(got, [1, 2, 1, 2])
 
-    def test_random_deterministic_per_seed(self):
-        a = core.pick_index("random", 0, 42, 0, -1, 3)
-        b = core.pick_index("random", 0, 42, 0, -1, 3)
+    def test_random_deterministic_per_value(self):
+        a = core.pick_index("random", 42, 0, -1, 3)
+        b = core.pick_index("random", 42, 0, -1, 3)
         self.assertEqual(a, b)
         self.assertTrue(0 <= a <= 2)
 
     def test_random_stays_in_subrange(self):
-        for s in range(50):
-            p = core.pick_index("random", 0, s, 1, 2, 3)
+        for v in range(50):
+            p = core.pick_index("random", v, 1, 2, 3)
             self.assertIn(p, (1, 2))
 
     def test_no_roles_raises(self):
         with self.assertRaises(ValueError):
-            core.pick_index("increment", 0, 0, 0, -1, 0)
+            core.pick_index("increment", 0, 0, -1, 0)
 
 
 class TestSelect(unittest.TestCase):
@@ -179,16 +179,16 @@ class TestSelect(unittest.TestCase):
             core.ROLES_DIR = d
             core._load_cached.cache_clear()
             try:
-                body, name, pos = core.select("fixed", "B", 0, 0, 0, -1)
+                body, name, pos = core.select("fixed", "B", 0, 0, -1)
                 self.assertEqual((name, pos, body), ("B", 1, "body-b.md"))
 
-                body, name, pos = core.select("increment", "A", 2, 0, 0, -1)
+                body, name, pos = core.select("increment", "A", 2, 0, -1)
                 self.assertEqual((name, pos), ("C", 2))
 
-                body, name, pos = core.select("increment", "A", 3, 0, 0, -1)
+                body, name, pos = core.select("increment", "A", 3, 0, -1)
                 self.assertEqual((name, pos), ("A", 0))  # wrapped
 
-                _, name_r, pos_r = core.select("random", "A", 0, 7, 0, -1)
+                _, name_r, pos_r = core.select("random", "A", 7, 0, -1)
                 self.assertIn(pos_r, (0, 1, 2))
                 self.assertIn(name_r, ("A", "B", "C"))
             finally:
@@ -200,13 +200,13 @@ class TestShippedRoles(unittest.TestCase):
     def test_shipped_roles_present(self):
         core._load_cached.cache_clear()
         labels = dict((lbl, fn) for lbl, fn in core.list_roles())
-        self.assertIn("Professional Photo", labels)
-        self.assertIn("Selfie Photo", labels)
+        self.assertIn("Photo Professional", labels)
+        self.assertIn("Photo Selfie", labels)
 
     def test_apply_returns_body_and_title(self):
         core._load_cached.cache_clear()
-        body, title = core.apply_role("Professional Photo")
-        self.assertEqual(title, "Professional Photo")
+        body, title = core.apply_role("Photo Professional")
+        self.assertEqual(title, "Photo Professional")
         self.assertTrue(body.strip())
 
 

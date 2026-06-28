@@ -20,8 +20,7 @@ Multi-stage prompt pipelines reuse the same long system prompts. Pasting that pr
 |---|---|---|---|
 | `mode` | combo | `fixed` | How the role is chosen: `fixed`, `increment`, or `random`. See Selection modes below. |
 | `role` | combo | first role | Role used in `fixed` mode. The list is built from `roles/*.md` at startup. Add a `.md` file and restart ComfyUI to add a role. |
-| `index` | INT | `0` | Position used in `increment` mode. Set its `control_after_generate` to **increment** to advance one role per generation. Wraps within `start..end`. |
-| `seed` | INT | `0` | Seed used in `random` mode. Set `control_after_generate` to **randomize** for a new pick each generation; the same seed reproduces the same role. |
+| `value` | INT | `0` | The single stepping input for `increment` and `random` modes (ignored in `fixed`). In `increment` it is the position; set its `control_after_generate` to **increment** to advance one role per generation, wrapping within `start..end`. In `random` it is the seed; set `control_after_generate` to **randomize** for a new pick each generation, and the same value reproduces the same role. |
 | `start` | INT | `0` | Lower bound position (0-based) into the alphabetically sorted role list. |
 | `end` | INT | `-1` | Upper bound position; `-1` means the last role. Out-of-range values are clamped. |
 
@@ -38,17 +37,19 @@ Multi-stage prompt pipelines reuse the same long system prompts. Pasting that pr
 Roles are sorted alphabetically by display name; `start`/`end` index into that
 list (0-based, `end = -1` means the last). The range is inclusive.
 
-- **fixed**: output the `role` dropdown. `index`/`seed`/`start`/`end` ignored.
-- **increment**: output the role at `start + (index mod span)`, wrapping back to
-  `start` after `end`. Set the `index` widget's `control_after_generate` to
+- **fixed**: output the `role` dropdown. `value`/`start`/`end` ignored.
+- **increment**: output the role at `start + (value mod span)`, wrapping back to
+  `start` after `end`. Set the `value` widget's `control_after_generate` to
   **increment** so each generation advances to the next role.
-- **random**: output a role picked from `start..end` using `seed`. The same seed
-  always yields the same role; set `control_after_generate` to **randomize** for a
-  fresh pick per run.
+- **random**: output a role picked from `start..end` using `value` as the seed. The
+  same value always yields the same role; set `control_after_generate` to
+  **randomize** for a fresh pick per run.
 
 Note: `control_after_generate` is the same per-widget control ComfyUI puts on the
-`seed` widget of samplers. Increment/random still work without it by changing
-`index`/`seed` yourself or by using ComfyUI's batch count.
+`seed` widget of samplers. `increment` and `random` share the single `value`
+widget because only one is ever read at a time. Both still work without
+`control_after_generate` by changing `value` yourself or using ComfyUI's batch
+count.
 
 ## Adding roles
 

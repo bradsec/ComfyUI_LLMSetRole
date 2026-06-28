@@ -184,11 +184,12 @@ def label_index(label):
     return 0
 
 
-def pick_index(mode, index, seed, start, end, n):
-    """Resolve a role position for increment/random modes.
+def pick_index(mode, value, start, end, n):
+    """Resolve a role position for increment/random modes from a single `value`.
 
-    increment: lo + (index mod span), wrapping at the end back to the start.
-    random:    lo + Random(seed).randrange(span), deterministic per seed.
+    `value` is the node's one stepping input (control_after_generate drives it):
+    increment: lo + (value mod span), wrapping at the end back to the start.
+    random:    lo + Random(value).randrange(span), deterministic per value.
     Raises ValueError if there are no roles.
     """
     if n < 1:
@@ -197,9 +198,9 @@ def pick_index(mode, index, seed, start, end, n):
         )
     lo, _, span = _bounds(start, end, n)
     if mode == "random":
-        return lo + random.Random(seed).randrange(span)
+        return lo + random.Random(value).randrange(span)
     # increment (and any unknown mode falls back to deterministic stepping)
-    return lo + (index % span)
+    return lo + (value % span)
 
 
 def role_at(pos):
@@ -212,28 +213,28 @@ def role_at(pos):
     return roles[pos]
 
 
-def select(mode, role, index, seed, start, end):
+def select(mode, role, value, start, end):
     """Resolve (system_prompt, role_name, resolved_index) for any mode.
 
     fixed: use the dropdown `role`. increment/random: compute the position from
-    index/seed within [start, end].
+    `value` within [start, end].
     """
     if mode == "fixed":
         pos = label_index(role)
         body, title = apply_role(role)
         return body, title, pos
-    pos = pick_index(mode, index, seed, start, end, len(list_roles()))
+    pos = pick_index(mode, value, start, end, len(list_roles()))
     _, fn = role_at(pos)
     title, body = load_role_text(fn)
     return body, title, pos
 
 
-def select_fingerprint(mode, role, index, seed, start, end):
+def select_fingerprint(mode, role, value, start, end):
     """Cache identity covering inputs and the resolved file's mtime."""
     try:
-        _, _, pos = select(mode, role, index, seed, start, end)
+        _, _, pos = select(mode, role, value, start, end)
         _, fn = role_at(pos)
         mtime = os.path.getmtime(os.path.join(ROLES_DIR, fn))
         return f"{mode}:{pos}:{fn}:{mtime}"
     except (ValueError, FileNotFoundError, OSError):
-        return f"{mode}:{role}:{index}:{seed}:{start}:{end}"
+        return f"{mode}:{role}:{value}:{start}:{end}"
