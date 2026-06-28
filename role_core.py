@@ -17,11 +17,8 @@ restart ComfyUI, since the dropdown options are built once at import.
 """
 
 import os
-import random
 import re
 from functools import lru_cache
-
-MODES = ("fixed", "increment", "random")
 
 ROLES_DIR = os.path.join(os.path.dirname(__file__), "roles")
 
@@ -157,24 +154,11 @@ def role_fingerprint(label):
         return str(label)
 
 
-# -- Position-based selection (fixed / increment / random) ---------------------
-
-def _clamp(v, lo, hi):
-    return lo if v < lo else hi if v > hi else v
-
-
-def _bounds(start, end, n):
-    """Return (lo, hi, span) inclusive position bounds within a list of size n.
-
-    end < 0 means "last". Out-of-range values are clamped; reversed bounds are
-    swapped. Assumes n >= 1 (callers handle the empty case first).
-    """
-    lo = _clamp(start, 0, n - 1)
-    hi = _clamp(end if end >= 0 else n - 1, 0, n - 1)
-    if lo > hi:
-        lo, hi = hi, lo
-    return lo, hi, hi - lo + 1
-
+# -- Selection -----------------------------------------------------------------
+# Stepping (one-by-one, random) is handled by the frontend's per-widget
+# control_after_generate on the `role` combo ("increment wrap" / "randomize"),
+# so the core only resolves the currently-selected label. No mode, counter, or
+# index math lives here.
 
 def label_index(label):
     """Position of a dropdown label in the sorted role list, or 0 if absent."""
@@ -184,97 +168,7 @@ def label_index(label):
     return 0
 
 
-def pick_index(mode, value, start, end, n):
-    """Resolve a role position for increment/random modes from an integer `value`.
-
-    Pure helper used by select() and the tests:
-    increment: lo + (value mod span), wrapping at the end back to the start.
-    random:    lo + Random(value).randrange(span), deterministic per value.
-    Raises ValueError if there are no roles.
-    """
-    if n < 1:
-        raise ValueError(
-            f"No role files found in {ROLES_DIR}. Add a .md file and restart ComfyUI."
-        )
-    lo, _, span = _bounds(start, end, n)
-    if mode == "random":
-        return lo + random.Random(value).randrange(span)
-    # increment (and any unknown mode falls back to deterministic stepping)
-    return lo + (value % span)
-
-
-# -- Increment state -----------------------------------------------------------
-# Per-node counters for increment mode, keyed by the node's unique_id. Process-
-# local: stepping restarts from the first role when ComfyUI restarts. select()
-# advances the counter, and the node forces a re-run each generation
-# (select_fingerprint returns NaN) so the walk progresses instead of caching.
-_increment_counters = {}
-
-
-def reset_counters():
-    """Clear all increment state. Used by tests; harmless at runtime."""
-    _increment_counters.clear()
-
-
-def _next_increment_pos(node_key, start, end, n):
-    """Advance this node's counter and return the next position within bounds."""
-    c = _increment_counters.get(node_key, 0)
-    _increment_counters[node_key] = c + 1
-    return pick_index("increment", c, start, end, n)
-
-
-def _random_pos(start, end, n):
-    """A fresh random position within bounds, non-reproducible by design."""
-    lo, _, span = _bounds(start, end, n)
-    return lo + random.randrange(span)
-
-
-def role_at(pos):
-    """(label, filename) at a position. Raises ValueError if no roles."""
-    roles = list_roles()
-    if not roles:
-        raise ValueError(
-            f"No role files found in {ROLES_DIR}. Add a .md file and restart ComfyUI."
-        )
-    return roles[pos]
-
-
-def select(mode, role, start, end, node_key=None):
-    """Resolve (system_prompt, role_name, resolved_index) for any mode.
-
-    fixed: use the dropdown `role`. increment: the next role alphabetically,
-    advancing this node's counter and wrapping within [start, end]. random: a
-    fresh random role within [start, end], picked anew each call.
-    """
-    if mode == "fixed":
-        pos = label_index(role)
-        body, title = apply_role(role)
-        return body, title, pos
-    n = len(list_roles())
-    if n < 1:
-        raise ValueError(
-            f"No role files found in {ROLES_DIR}. Add a .md file and restart ComfyUI."
-        )
-    pos = _random_pos(start, end, n) if mode == "random" \
-        else _next_increment_pos(node_key, start, end, n)
-    _, fn = role_at(pos)
-    title, body = load_role_text(fn)
-    return body, title, pos
-
-
-def select_fingerprint(mode, role, start, end):
-    """Cache identity.
-
-    fixed caches on the resolved file's mtime so the node only re-runs when the
-    role or its text changes. increment/random return NaN, which never equals
-    itself, so ComfyUI re-runs the node every generation and the walk advances.
-    """
-    if mode != "fixed":
-        return float("nan")
-    try:
-        pos = label_index(role)
-        _, fn = role_at(pos)
-        mtime = os.path.getmtime(os.path.join(ROLES_DIR, fn))
-        return f"fixed:{pos}:{fn}:{mtime}"
-    except (ValueError, FileNotFoundError, OSError):
-        return f"fixed:{role}"
+def resolve(role):
+    """Resolve (system_prompt, role_name, resolved_index) for the selected role."""
+    body, title = apply_role(role)
+    return body, title, label_index(role)

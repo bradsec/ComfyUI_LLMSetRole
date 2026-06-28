@@ -127,80 +127,29 @@ class TestBadEncoding(unittest.TestCase):
         self.assertIn("body", body)
 
 
-class TestBounds(unittest.TestCase):
-    def test_full_range_with_end_minus_one(self):
-        self.assertEqual(core._bounds(0, -1, 3), (0, 2, 3))
-
-    def test_clamp_out_of_range(self):
-        self.assertEqual(core._bounds(-5, 99, 3), (0, 2, 3))
-
-    def test_subrange(self):
-        self.assertEqual(core._bounds(1, 2, 4), (1, 2, 2))
-
-    def test_swapped_bounds(self):
-        self.assertEqual(core._bounds(2, 0, 3), (0, 2, 3))
-
-
-class TestPickIndex(unittest.TestCase):
-    def test_increment_wraps(self):
-        got = [core.pick_index("increment", i, 0, -1, 3) for i in range(5)]
-        self.assertEqual(got, [0, 1, 2, 0, 1])
-
-    def test_increment_within_subrange(self):
-        got = [core.pick_index("increment", i, 1, 2, 3) for i in range(4)]
-        self.assertEqual(got, [1, 2, 1, 2])
-
-    def test_random_deterministic_per_value(self):
-        a = core.pick_index("random", 42, 0, -1, 3)
-        b = core.pick_index("random", 42, 0, -1, 3)
-        self.assertEqual(a, b)
-        self.assertTrue(0 <= a <= 2)
-
-    def test_random_stays_in_subrange(self):
-        for v in range(50):
-            p = core.pick_index("random", v, 1, 2, 3)
-            self.assertIn(p, (1, 2))
-
-    def test_no_roles_raises(self):
-        with self.assertRaises(ValueError):
-            core.pick_index("increment", 0, 0, -1, 0)
-
-
-class TestSelect(unittest.TestCase):
+class TestResolve(unittest.TestCase):
     def _make(self, d, names):
         for n in names:
             with open(os.path.join(d, n), "w", encoding="utf-8") as f:
                 f.write(f"<!-- title: {n[:-3].upper()} -->\nbody-{n}")
 
-    def test_select_modes(self):
+    def test_resolve_returns_body_title_index(self):
         with tempfile.TemporaryDirectory() as d:
             self._make(d, ("a.md", "b.md", "c.md"))  # titles A, B, C -> positions 0,1,2
             orig = core.ROLES_DIR
             core.ROLES_DIR = d
             core._load_cached.cache_clear()
-            core.reset_counters()
             try:
-                body, name, pos = core.select("fixed", "B", 0, -1)
-                self.assertEqual((name, pos, body), ("B", 1, "body-b.md"))
-
-                # increment walks alphabetically, advancing once per call, wrapping
-                core.reset_counters()
-                walk = [core.select("increment", "A", 0, -1, "node1")[1] for _ in range(4)]
-                self.assertEqual(walk, ["A", "B", "C", "A"])
-
-                # distinct node ids keep independent counters
-                core.reset_counters()
-                self.assertEqual(core.select("increment", "A", 0, -1, "x")[1], "A")
-                self.assertEqual(core.select("increment", "A", 0, -1, "y")[1], "A")
-                self.assertEqual(core.select("increment", "A", 0, -1, "x")[1], "B")
-
-                _, name_r, pos_r = core.select("random", "A", 0, -1)
-                self.assertIn(pos_r, (0, 1, 2))
-                self.assertIn(name_r, ("A", "B", "C"))
+                self.assertEqual(core.resolve("A"), ("body-a.md", "A", 0))
+                self.assertEqual(core.resolve("B"), ("body-b.md", "B", 1))
+                self.assertEqual(core.resolve("C"), ("body-c.md", "C", 2))
             finally:
                 core.ROLES_DIR = orig
                 core._load_cached.cache_clear()
-                core.reset_counters()
+
+    def test_resolve_unknown_role_raises(self):
+        with self.assertRaises(ValueError):
+            core.resolve("Definitely Not A Real Role")
 
 
 class TestShippedRoles(unittest.TestCase):

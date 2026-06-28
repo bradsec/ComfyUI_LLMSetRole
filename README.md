@@ -8,7 +8,7 @@ Designed to pair with LLM nodes such as the [stavsap/comfyui-ollama](https://git
 
 ## The problem it solves
 
-Multi-stage prompt pipelines reuse the same long system prompts. Pasting that prose into a text box on every workflow is error-prone and hard to keep consistent. This node keeps each role as a Markdown file on disk and exposes them as a dropdown, so a workflow picks a role by name and the exact, version-controlled text flows into the LLM. Modes let you also step or randomize through your roles across a batch.
+Multi-stage prompt pipelines reuse the same long system prompts. Pasting that prose into a text box on every workflow is error-prone and hard to keep consistent. This node keeps each role as a Markdown file on disk and exposes them as a dropdown, so a workflow picks a role by name and the exact, version-controlled text flows into the LLM. The role widget's `control_after_generate` lets you step or randomize through your roles across a batch.
 
 ## Nodes included
 
@@ -18,10 +18,7 @@ Multi-stage prompt pipelines reuse the same long system prompts. Pasting that pr
 
 | Input | Type | Default | Description |
 |---|---|---|---|
-| `mode` | combo | `fixed` | How the role is chosen: `fixed`, `increment`, or `random`. See Selection modes below. |
-| `role` | combo | first role | Role used in `fixed` mode. The list is built from `roles/*.md` at startup. Add a `.md` file and restart ComfyUI to add a role. |
-| `start` | INT | `0` | Lower bound position (0-based) into the alphabetically sorted role list. Bounds `increment` and `random`. |
-| `end` | INT | `-1` | Upper bound position; `-1` means the last role. Out-of-range values are clamped. |
+| `role` | combo | first role | The role whose text is output. The list is built from `roles/*.md` at startup (add a `.md` file and restart ComfyUI to add a role). Use the widget's `control_after_generate` to step or randomize across a batch. See Stepping below. |
 
 ## Outputs
 
@@ -29,23 +26,21 @@ Multi-stage prompt pipelines reuse the same long system prompts. Pasting that pr
 |---|---|---|
 | `system_prompt` | STRING | The full text of the selected role file, ready to wire into an LLM node's `system_prompt` input. |
 | `role_name` | STRING | The selected role's display name, e.g. for logging or filename suffixes. |
-| `resolved_index` | INT | The list position actually used. Useful for logging or labelling batched runs. |
+| `resolved_index` | INT | The selected role's position in the alphabetically sorted list. Useful for logging or labelling batched runs. |
 
-## Selection modes
+## Stepping across a batch
 
-Roles are sorted alphabetically by display name; `start`/`end` index into that
-list (0-based, `end = -1` means the last). The range is inclusive.
+The `role` widget carries ComfyUI's per-widget `control_after_generate` control,
+the same one samplers put on `seed`. Use it to choose how the role advances
+between generations:
 
-- **fixed**: output the `role` dropdown. `start`/`end` ignored.
-- **increment**: output the next role alphabetically, advancing one step per
-  generation and wrapping from `end` back to `start`. The node steps on its own;
-  there is no extra widget to set. The counter is per-node and process-local, so
-  it restarts from `start` when ComfyUI restarts.
-- **random**: output a role picked at random within `start..end`, fresh each
-  generation.
+- **fixed**: keep the selected role.
+- **increment wrap**: advance to the next role each generation, wrapping from the
+  last role back to the first. Drive a batch through every role in order.
+- **randomize**: pick a random role each generation.
 
-`increment` and `random` re-run the node on every generation (so a downstream LLM
-node re-runs too); `fixed` only re-runs when the role or its file text changes.
+The frontend steps the combo itself, so the role you see selected on the node is
+the role being used. Roles are sorted alphabetically by display name.
 
 ## Adding roles
 
@@ -78,7 +73,7 @@ cd ComfyUI_LLMSetRole
 python -m unittest test_set_role -v
 ```
 
-Expect 25 passing tests (title parsing, filename prettify, label-collision disambiguation, path-traversal rejection, missing-file error, edit hot-reload, bad-encoding tolerance, range bounds/clamp/swap, increment wrap, random determinism, mode selection, shipped-role discovery).
+Expect 17 passing tests (title parsing, filename prettify, label-collision disambiguation, path-traversal rejection, missing-file error, edit hot-reload, bad-encoding tolerance, role resolution, shipped-role discovery).
 
 ### In ComfyUI
 

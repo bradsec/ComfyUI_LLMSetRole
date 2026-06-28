@@ -1,11 +1,12 @@
 """ComfyUI_LLMSetRole nodes.
 
 A role picker: a dropdown of system-prompt roles loaded from roles/*.md, output
-as a STRING to wire into an LLM node's system_prompt input. A mode control
-selects the role: a fixed dropdown pick, an automatic alphabetical step (one role
-per generation), or a fresh random pick, bounded to a start..end slice of the list.
+as a STRING to wire into an LLM node's system_prompt input. To step or randomize
+roles across a batch, use the role widget's own control_after_generate control
+("fixed", "increment wrap", or "randomize"); the frontend advances the combo, so
+the node needs no mode, counter, or index logic of its own.
 
-Dual-API: the shared core (role_core.select) is wrapped by a V1 class
+Dual-API: the shared core (role_core.resolve) is wrapped by a V1 class
 (NODE_CLASS_MAPPINGS, authoritative on the 0.25.0 if/elif loader) and an
 import-guarded V3 class (comfy_entrypoint) for builds whose loader prefers the
 comfy_api schema. node_id "LLMSetRole" is fixed in both.
@@ -16,21 +17,17 @@ from . import role_core as core
 NODE_ID = "LLMSetRole"
 DISPLAY_NAME = "Set Role"
 CATEGORY = "LLM"
-DESCRIPTION = "Pick an LLM role system prompt from roles/*.md (fixed, increment, or random) and output it as a STRING for an LLM node's system_prompt."
+DESCRIPTION = "Pick an LLM role system prompt from roles/*.md and output it as a STRING for an LLM node's system_prompt. Use the role widget's control_after_generate to step or randomize roles across a batch."
 
-_ROLE_TIP = ("Role used in 'fixed' mode. The list is built from roles/*.md at "
+_ROLE_TIP = ("The role whose Markdown becomes the system prompt. Set this widget's "
+             "control_after_generate to step roles across a batch: 'fixed' holds it, "
+             "'increment wrap' advances one role per generation and wraps around, "
+             "'randomize' picks at random. The list is built from roles/*.md at "
              "startup; add a .md file and restart ComfyUI to add a role.")
-_MODE_TIP = ("fixed: use the role dropdown. increment: step to the next role "
-             "alphabetically each generation, wrapping within start..end. random: a "
-             "fresh random role within start..end each generation. increment and random "
-             "advance on their own; no extra widget to set.")
-_START_TIP = "Lower bound position (0-based) into the alphabetically sorted role list."
-_END_TIP = "Upper bound position; -1 means the last role. Out-of-range values are clamped."
 
 # Combo options built once at import. role_core guarantees a non-empty list.
 _ROLE_OPTIONS = core.role_labels()
 _DEFAULT_ROLE = _ROLE_OPTIONS[0]
-_MAX_INT = 0xFFFFFFFFFFFFFFFF
 
 
 # -- V1 node -------------------------------------------------------------------
@@ -47,20 +44,18 @@ class LLMSetRoleNode:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "mode": (list(core.MODES), {"default": "fixed", "tooltip": _MODE_TIP}),
-                "role": (_ROLE_OPTIONS, {"default": _DEFAULT_ROLE, "tooltip": _ROLE_TIP}),
-                "start": ("INT", {"default": 0, "min": 0, "max": _MAX_INT, "tooltip": _START_TIP}),
-                "end": ("INT", {"default": -1, "min": -1, "max": _MAX_INT, "tooltip": _END_TIP}),
-            },
-            "hidden": {"unique_id": "UNIQUE_ID"},
+                "role": (_ROLE_OPTIONS, {"default": _DEFAULT_ROLE,
+                                         "control_after_generate": True,
+                                         "tooltip": _ROLE_TIP}),
+            }
         }
 
-    def set_role(self, mode, role, start, end, unique_id=None):
-        return core.select(mode, role, start, end, unique_id)
+    def set_role(self, role):
+        return core.resolve(role)
 
     @classmethod
-    def IS_CHANGED(cls, mode, role, start, end, unique_id=None):
-        return core.select_fingerprint(mode, role, start, end)
+    def IS_CHANGED(cls, role):
+        return core.role_fingerprint(role)
 
 
 NODE_CLASS_MAPPINGS = {NODE_ID: LLMSetRoleNode}
@@ -72,6 +67,16 @@ NODE_DISPLAY_NAME_MAPPINGS = {NODE_ID: DISPLAY_NAME}
 try:
     from comfy_api.v0_0_2 import io, ComfyExtension
 
+    def _role_input():
+        """io.Combo.Input for the role, tolerating comfy_api builds whose Combo
+        does not accept control_after_generate (older schema versions)."""
+        try:
+            return io.Combo.Input("role", options=_ROLE_OPTIONS, default=_DEFAULT_ROLE,
+                                  control_after_generate=True, tooltip=_ROLE_TIP)
+        except TypeError:
+            return io.Combo.Input("role", options=_ROLE_OPTIONS, default=_DEFAULT_ROLE,
+                                  tooltip=_ROLE_TIP)
+
     class LLMSetRoleV3(io.ComfyNode):
         @classmethod
         def define_schema(cls) -> io.Schema:
@@ -80,15 +85,7 @@ try:
                 display_name=DISPLAY_NAME,
                 category=CATEGORY,
                 description=DESCRIPTION,
-                inputs=[
-                    io.Combo.Input("mode", options=list(core.MODES),
-                                   default="fixed", tooltip=_MODE_TIP),
-                    io.Combo.Input("role", options=_ROLE_OPTIONS,
-                                   default=_DEFAULT_ROLE, tooltip=_ROLE_TIP),
-                    io.Int.Input("start", default=0, min=0, max=_MAX_INT, tooltip=_START_TIP),
-                    io.Int.Input("end", default=-1, min=-1, max=_MAX_INT, tooltip=_END_TIP),
-                ],
-                hidden=[io.Hidden.unique_id],
+                inputs=[_role_input()],
                 outputs=[
                     io.String.Output(id="system_prompt", display_name="system_prompt"),
                     io.String.Output(id="role_name", display_name="role_name"),
@@ -97,12 +94,12 @@ try:
             )
 
         @classmethod
-        def fingerprint_inputs(cls, mode, role, start, end):
-            return core.select_fingerprint(mode, role, start, end)
+        def fingerprint_inputs(cls, role):
+            return core.role_fingerprint(role)
 
         @classmethod
-        def execute(cls, mode, role, start, end) -> io.NodeOutput:
-            body, title, pos = core.select(mode, role, start, end, cls.hidden.unique_id)
+        def execute(cls, role) -> io.NodeOutput:
+            body, title, pos = core.resolve(role)
             return io.NodeOutput(body, title, pos)
 
     class LLMSetRoleExtension(ComfyExtension):
