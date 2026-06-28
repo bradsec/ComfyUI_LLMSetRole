@@ -2,8 +2,8 @@
 
 A role picker: a dropdown of system-prompt roles loaded from roles/*.md, output
 as a STRING to wire into an LLM node's system_prompt input. A mode control
-selects the role by fixed dropdown, by an incrementing value, or randomly seeded
-by that same value, bounded to a start..end slice of the list.
+selects the role: a fixed dropdown pick, an automatic alphabetical step (one role
+per generation), or a fresh random pick, bounded to a start..end slice of the list.
 
 Dual-API: the shared core (role_core.select) is wrapped by a V1 class
 (NODE_CLASS_MAPPINGS, authoritative on the 0.25.0 if/elif loader) and an
@@ -20,12 +20,10 @@ DESCRIPTION = "Pick an LLM role system prompt from roles/*.md (fixed, increment,
 
 _ROLE_TIP = ("Role used in 'fixed' mode. The list is built from roles/*.md at "
              "startup; add a .md file and restart ComfyUI to add a role.")
-_MODE_TIP = ("fixed: use the role dropdown. increment: walk the list by 'value', "
-             "wrapping within start..end. random: pick within start..end from 'value'.")
-_VALUE_TIP = ("The stepping input for increment/random modes (ignored in fixed). "
-              "increment: set control_after_generate to increment to advance one role "
-              "per generation, wrapping within start..end. random: set it to randomize "
-              "for a new pick per generation; the same value reproduces the same role.")
+_MODE_TIP = ("fixed: use the role dropdown. increment: step to the next role "
+             "alphabetically each generation, wrapping within start..end. random: a "
+             "fresh random role within start..end each generation. increment and random "
+             "advance on their own; no extra widget to set.")
 _START_TIP = "Lower bound position (0-based) into the alphabetically sorted role list."
 _END_TIP = "Upper bound position; -1 means the last role. Out-of-range values are clamped."
 
@@ -51,19 +49,18 @@ class LLMSetRoleNode:
             "required": {
                 "mode": (list(core.MODES), {"default": "fixed", "tooltip": _MODE_TIP}),
                 "role": (_ROLE_OPTIONS, {"default": _DEFAULT_ROLE, "tooltip": _ROLE_TIP}),
-                "value": ("INT", {"default": 0, "min": 0, "max": _MAX_INT,
-                                  "control_after_generate": True, "tooltip": _VALUE_TIP}),
                 "start": ("INT", {"default": 0, "min": 0, "max": _MAX_INT, "tooltip": _START_TIP}),
                 "end": ("INT", {"default": -1, "min": -1, "max": _MAX_INT, "tooltip": _END_TIP}),
-            }
+            },
+            "hidden": {"unique_id": "UNIQUE_ID"},
         }
 
-    def set_role(self, mode, role, value, start, end):
-        return core.select(mode, role, value, start, end)
+    def set_role(self, mode, role, start, end, unique_id=None):
+        return core.select(mode, role, start, end, unique_id)
 
     @classmethod
-    def IS_CHANGED(cls, mode, role, value, start, end):
-        return core.select_fingerprint(mode, role, value, start, end)
+    def IS_CHANGED(cls, mode, role, start, end, unique_id=None):
+        return core.select_fingerprint(mode, role, start, end)
 
 
 NODE_CLASS_MAPPINGS = {NODE_ID: LLMSetRoleNode}
@@ -74,15 +71,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {NODE_ID: DISPLAY_NAME}
 
 try:
     from comfy_api.v0_0_2 import io, ComfyExtension
-
-    def _int_input(name, *, control=False, **kw):
-        """io.Int.Input, tolerating comfy_api builds without control_after_generate."""
-        if control:
-            try:
-                return io.Int.Input(name, control_after_generate=True, **kw)
-            except TypeError:
-                pass
-        return io.Int.Input(name, **kw)
 
     class LLMSetRoleV3(io.ComfyNode):
         @classmethod
@@ -97,11 +85,10 @@ try:
                                    default="fixed", tooltip=_MODE_TIP),
                     io.Combo.Input("role", options=_ROLE_OPTIONS,
                                    default=_DEFAULT_ROLE, tooltip=_ROLE_TIP),
-                    _int_input("value", control=True, default=0, min=0, max=_MAX_INT,
-                               tooltip=_VALUE_TIP),
-                    _int_input("start", default=0, min=0, max=_MAX_INT, tooltip=_START_TIP),
-                    _int_input("end", default=-1, min=-1, max=_MAX_INT, tooltip=_END_TIP),
+                    io.Int.Input("start", default=0, min=0, max=_MAX_INT, tooltip=_START_TIP),
+                    io.Int.Input("end", default=-1, min=-1, max=_MAX_INT, tooltip=_END_TIP),
                 ],
+                hidden=[io.Hidden.unique_id],
                 outputs=[
                     io.String.Output(id="system_prompt", display_name="system_prompt"),
                     io.String.Output(id="role_name", display_name="role_name"),
@@ -110,12 +97,12 @@ try:
             )
 
         @classmethod
-        def fingerprint_inputs(cls, mode, role, value, start, end):
-            return core.select_fingerprint(mode, role, value, start, end)
+        def fingerprint_inputs(cls, mode, role, start, end):
+            return core.select_fingerprint(mode, role, start, end)
 
         @classmethod
-        def execute(cls, mode, role, value, start, end) -> io.NodeOutput:
-            body, title, pos = core.select(mode, role, value, start, end)
+        def execute(cls, mode, role, start, end) -> io.NodeOutput:
+            body, title, pos = core.select(mode, role, start, end, cls.hidden.unique_id)
             return io.NodeOutput(body, title, pos)
 
     class LLMSetRoleExtension(ComfyExtension):

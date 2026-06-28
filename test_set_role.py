@@ -178,22 +178,29 @@ class TestSelect(unittest.TestCase):
             orig = core.ROLES_DIR
             core.ROLES_DIR = d
             core._load_cached.cache_clear()
+            core.reset_counters()
             try:
-                body, name, pos = core.select("fixed", "B", 0, 0, -1)
+                body, name, pos = core.select("fixed", "B", 0, -1)
                 self.assertEqual((name, pos, body), ("B", 1, "body-b.md"))
 
-                body, name, pos = core.select("increment", "A", 2, 0, -1)
-                self.assertEqual((name, pos), ("C", 2))
+                # increment walks alphabetically, advancing once per call, wrapping
+                core.reset_counters()
+                walk = [core.select("increment", "A", 0, -1, "node1")[1] for _ in range(4)]
+                self.assertEqual(walk, ["A", "B", "C", "A"])
 
-                body, name, pos = core.select("increment", "A", 3, 0, -1)
-                self.assertEqual((name, pos), ("A", 0))  # wrapped
+                # distinct node ids keep independent counters
+                core.reset_counters()
+                self.assertEqual(core.select("increment", "A", 0, -1, "x")[1], "A")
+                self.assertEqual(core.select("increment", "A", 0, -1, "y")[1], "A")
+                self.assertEqual(core.select("increment", "A", 0, -1, "x")[1], "B")
 
-                _, name_r, pos_r = core.select("random", "A", 7, 0, -1)
+                _, name_r, pos_r = core.select("random", "A", 0, -1)
                 self.assertIn(pos_r, (0, 1, 2))
                 self.assertIn(name_r, ("A", "B", "C"))
             finally:
                 core.ROLES_DIR = orig
                 core._load_cached.cache_clear()
+                core.reset_counters()
 
 
 class TestShippedRoles(unittest.TestCase):
