@@ -22,3 +22,6 @@ CLAUDE.md
 # Private role prose - never commit (user roles stay local)
 roles/*.md
 !roles/.gitkeep
+
+# Internal style-authoring spec - keep local, do not ship
+roles_style_format.md
