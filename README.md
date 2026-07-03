@@ -73,7 +73,7 @@ cd ComfyUI_LLMSetRole
 python -m unittest test_set_role -v
 ```
 
-Expect 17 passing tests (title parsing, filename prettify, label-collision disambiguation, path-traversal rejection, missing-file error, edit hot-reload, bad-encoding tolerance, role resolution, shipped-role discovery).
+Expect 16 tests (title parsing, filename prettify, label-collision disambiguation, path-traversal rejection, missing-file error, edit hot-reload, bad-encoding tolerance, role resolution, local-role validation). The local-role test skips when roles/ has no .md files.
 
 ### In ComfyUI
 

@@ -152,18 +152,19 @@ class TestResolve(unittest.TestCase):
             core.resolve("Definitely Not A Real Role")
 
 
-class TestShippedRoles(unittest.TestCase):
-    def test_shipped_roles_present(self):
-        core._load_cached.cache_clear()
-        labels = dict((lbl, fn) for lbl, fn in core.list_roles())
-        self.assertIn("Photo Professional", labels)
-        self.assertIn("Photo Selfie", labels)
+class TestLocalRoles(unittest.TestCase):
+    """Role files are user-provided (roles/ is gitignored); validate whatever
+    is installed locally instead of asserting specific bundled names."""
 
-    def test_apply_returns_body_and_title(self):
+    def test_installed_roles_all_apply(self):
         core._load_cached.cache_clear()
-        body, title = core.apply_role("Photo Professional")
-        self.assertEqual(title, "Photo Professional")
-        self.assertTrue(body.strip())
+        roles = core.list_roles()
+        if not roles:
+            self.skipTest("no role files installed in roles/")
+        for label, _fn in roles:
+            body, title = core.apply_role(label)
+            self.assertEqual(title, label)
+            self.assertTrue(body.strip(), f"role {label!r} has empty body")
 
 
 if __name__ == "__main__":
